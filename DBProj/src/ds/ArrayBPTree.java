@@ -1,13 +1,11 @@
 package ds;
 
 import db.Record;
-import db.Table;
 
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashMap;
 
 public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
 
@@ -111,7 +109,7 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
 
     public static class ExternalNode<K, V> extends Node<K, V> {
 
-        protected static class MapEntry<K, V> implements Entry<K, V> {
+        protected static class MapEntry<K, V> implements Entry<K, V> {   //
 
             private K k;
             private V v;
@@ -145,7 +143,7 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
         private Comparator<Entry<K, V>> comp;
 
         public ExternalNode(int m, K k, V v,Comparator<Entry<K, V>> comp) {  // insert dp in map and then pass it here
-            super(m - 1, (int) (Math.ceil(m / 2.0) - 1), 0);
+            super(m - 1, (int) (Math.ceil(m / 2) - 1), 0);
             this.map = new MapEntry[m];
             this.insertExternal(k, v,comp);  //
             this.comp=comp;
@@ -153,7 +151,7 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
 
 
         public ExternalNode(int m, Entry<K, V>[] dps, InternalNode<K, V> parent, int dg) {  // calc dg using linear
-            super(m - 1, (int) (Math.ceil(m / 2.0) - 1), dg);
+            super(m - 1, (int) (Math.ceil(m / 2) - 1), dg);
             this.map = (MapEntry<K, V>[]) dps;  //
             this.parent = parent;
         }
@@ -162,15 +160,14 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
             MapEntry<K, V> newEntry = new MapEntry<>(k, v);
 
             if (this.isFull()) {
-
                 /* Flow of execution goes here when numPairs == maxNumPairs */
 
                 return false;
             } else {
-
                 // Insert dictionary pair, increment numPairs, sort dictionary
-                degree++;
                 this.map[degree] = newEntry;
+                degree++;
+
                 Arrays.sort(this.map, 0, degree,comp);
 
                 return true;
@@ -186,35 +183,38 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
             // Sort all the dictionary pairs with the included pair to be inserted
             map[degree] = new MapEntry<>(k, v);
             this.degree++;
+
             this.sortMap(comp);
 
             // Split the sorted pairs into two halves
             int midpoint = midPoint;
-            MapEntry<K, V>[] halfDict = splitDictionary(this, midpoint);
+
+            MapEntry<K, V>[] halfDict = splitDictionary(midpoint);
 
             if (this.parent == null) {
 
                 /* Flow of execution goes here when there is 1 node in tree */
 
                 // Create internal node to serve as parent, use dictionary midpoint key
-                K[] parent_keys = (K[])Array.newInstance(k.getClass(),this.maxDegree);  //
+                K[] parent_keys = (K[])Array.newInstance(k.getClass(),this.maxDegree+1);  //
                 parent_keys[0] = halfDict[0].getKey();
-                InternalNode<K, V> parent = new InternalNode<K, V>(this.maxDegree, parent_keys);
+                InternalNode<K, V> parent = new InternalNode<K, V>(this.maxDegree+1, parent_keys);
                 this.parent = parent;
-                parent.appendChildPointer(this);
+                parent.appendChildPointer(this);   //
 
             } else {
 
                 /* Flow of execution goes here when parent exists */
 
                 // Add new key to parent for proper indexing
-                K newParentKey = halfDict[1].getKey();
+                K newParentKey = halfDict[0].getKey();
                 this.parent.keys[this.parent.degree - 1] = newParentKey;
                 Arrays.sort(this.parent.keys, 0, this.parent.degree);
             }
 
             // Create new LeafNode that holds the other half
-            ExternalNode<K, V> newLeafNode = new ExternalNode<K, V>(this.maxDegree, halfDict, this.parent, linearNullSearch(halfDict));
+            ExternalNode<K, V> newLeafNode = new ExternalNode<K, V>(this.maxDegree+1, halfDict, this.parent, linearNullSearch(halfDict));
+
 
             // Update child pointers of parent node
             int pointerIndex = this.parent.findIndexOfPointer(this) + 1;
@@ -235,18 +235,19 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
             Arrays.sort(map, comp);
         }
 
-        private MapEntry<K, V>[] splitDictionary(ExternalNode<K, V> ln, int split) {
 
-            MapEntry<K, V>[] dictionary = ln.map;
+        private MapEntry<K, V>[] splitDictionary(int split) {
+
+            MapEntry<K, V>[] dictionary = this.map;
 
 		/* Initialize two dictionaries that each hold half of the original
 		   dictionary values */
-            MapEntry<K, V>[] halfDict = new MapEntry[this.maxDegree];
+            MapEntry<K, V>[] halfDict = new MapEntry[this.maxDegree+1];
 
             // Copy half of the values into halfDict
             for (int i = split; i < dictionary.length; i++) {
                 halfDict[i - split] = dictionary[i];
-                ln.delete(i);
+                this.delete(i);
             }
 
             return halfDict;
@@ -288,7 +289,7 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
 
 						/* Insert borrowed dictionary pair, sort dictionary,
 						   and delete dictionary pair from sibling */
-                this.insertExternal(borrowedDP.getKey(), borrowedDP.getValue(),comp);  /////////////
+                this.insertExternal(borrowedDP.getKey(), borrowedDP.getValue(),comp);
                 this.sortMap(comp);
                 sibling.delete(sibling.degree - 1);
 
@@ -596,6 +597,10 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
         }
         return values;
     }
+
+
+
+
     public Entry<K, V> insert(K key, V value) {
 
         Entry<K, V> newEntry = null;
@@ -607,9 +612,13 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
             // Create leaf node as first node in B plus tree (root is null)
 
             // Set as first leaf node (can be used later for in-order leaf traversal)
-            this.firstEx = new ExternalNode<K, V>(this.m, key, value,getComp());
+            ExternalNode<K, V> ln = new ExternalNode<K, V>(this.m, key, value, getComp());
+
+            // Set as first leaf node (can be used later for in-order leaf traversal)
+            this.firstEx = ln;
 
         } else {
+
 
             // Find leaf node to insert into
             ExternalNode<K, V> ln = (this.root == null) ? this.firstEx : findExternalNode(key);
@@ -624,11 +633,11 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
                     this.root = ln.parent;
 
                 } else {
-
 					/* If parent is overfull, repeat the process up the tree,
 			   		   until no deficiencies are found */
                     InternalNode<K, V> in = ln.parent;
                     while (in != null) {
+                        System.out.println(1);
                         if (in.isOverfull()) {
                             splitInternalNode(in);
                         } else {
@@ -637,7 +646,8 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
                         in = in.parent;
                     }
                 }
-            } newEntry = ln.findEntry(key, value);
+            }
+            newEntry = ln.findEntry(key, value);
         } return newEntry;
     }
     private void splitInternalNode(InternalNode<K, V> in) {
@@ -844,5 +854,20 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
     public K getKey() {
         return key;
     }
+
+    public static void main(String[] args) {
+        ArrayBPTree<Integer, Integer> it = new ArrayBPTree<>(3, 1, new Comparator<Integer>(){
+            @Override
+            public int compare(Integer o1, Integer o2) {
+                return o1.compareTo(o2);
+            }
+        });
+        it.insert(1, 1);
+        it.insert(28, 1);
+        it.insert(2, 1);
+        it.insert(4, 1);
+
+    }
+
 
 }
