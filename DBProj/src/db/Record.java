@@ -7,7 +7,7 @@ public class Record {
     private final ArrayList<Field<?>> cells;
 
     public Record(ArrayList<Field<?>> c) {
-        cells = new ArrayList<>();
+        cells = c;
     }
 
     public ArrayList<Field<?>> getCells() {

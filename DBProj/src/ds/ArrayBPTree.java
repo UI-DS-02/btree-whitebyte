@@ -1,230 +1,122 @@
 package ds;
 
+import db.Record;
+import db.Table;
+
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.lang.reflect.Array;
+import java.util.HashMap;
 
-class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
-    private int m;
-    private InternalNode root;
-    private LeafNode firstLeaf;
-    private K key;
+public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
 
-    /**
-     * Constructor
-     * @param m: the order (fanout) of the B+ tree
-     */
-    public ArrayBPTree(int m, Comparator<K> comp,K key) {
-        super(comp);
-        this.m = m;
-        this.root = null;
-        this.key=key;
-    }
+    private static class Node<K, V> {
 
-
-    /**
-     * This class represents a general node within the B+ tree and serves as a
-     * superclass of InternalNode and LeafNode.
-     */
-    public class Node {
-        InternalNode parent;
-    }
-
-    /**
-     * This class represents the internal nodes within the B+ tree that traffic
-     * all search/insert/delete operations. An internal node only holds keys; it
-     * does not hold dictionary pairs.
-     */
-    private class InternalNode extends Node {
         int maxDegree;
         int minDegree;
+        int midPoint;
         int degree;
-        InternalNode leftSibling;
-        InternalNode rightSibling;
-        K[] keys;
-        Node[] childPointers;
 
-        /**
-         * This method appends 'pointer' to the end of the childPointers
-         * instance variable of the InternalNode object. The pointer can point to
-         * an InternalNode object or a LeafNode object since the formal
-         * parameter specifies a Node object.
-         * @param pointer: Node pointer that is to be appended to the
-         *                    childPointers list
-         */
-        private void appendChildPointer(Node pointer) {
+        Node<K, V> leftSibling;
+        Node<K, V> rightSibling;
+        InternalNode<K, V> parent;
+
+        public Node(int max, int min, int dg) {
+            maxDegree = max;
+            minDegree = min;
+            midPoint =  (int) Math.ceil((this.maxDegree + 1) / 2.0) - 1;
+            degree = dg;
+        }
+
+    }
+
+    private static class InternalNode<K, V> extends Node<K, V> {
+
+        K[] keys;
+        Node<K, V>[] childPointers;
+
+
+        private InternalNode(int m, K[] keys) {
+            super(m, (int) Math.ceil(m / 2.0), 0);
+            this.keys = keys;
+            this.childPointers = (Node[]) Array.newInstance(Node.class, this.maxDegree + 1);;
+            //this.childPointers = (Node[]) Array.newInstance(new ArrayBPTree.Node().getClass(), this.maxDegree + 1);
+        }
+
+
+        private InternalNode(int m, K[] keys, Node<K, V>[] pointers, int dg) {
+            super(m, (int) Math.ceil(m / 2.0), dg);
+            this.keys = keys;
+            this.childPointers = pointers;
+        }
+
+        private void appendChildPointer(Node<K, V> pointer) {
             this.childPointers[degree] = pointer;
             this.degree++;
         }
 
-        /**
-         * Given a Node pointer, this method will return the index of where the
-         * pointer lies within the childPointers instance variable. If the pointer
-         * can't be found, the method returns -1.
-         * @param pointer: a Node pointer that may lie within the childPointers
-         *                     instance variable
-         * @return the index of 'pointer' within childPointers, or -1 if
-         * 'pointer' can't be found
-         */
-        private int findIndexOfPointer(Node pointer) {
+        private int findIndexOfPointer(Node<K, V> pointer) {
             for (int i = 0; i < childPointers.length; i++) {
-                if (childPointers[i] == pointer) { return i; }
+                if (childPointers[i] == pointer) {
+                    return i;
+                }
             }
             return -1;
         }
 
-        /**
-         * Given a pointer to a Node object and an integer index, this method
-         * inserts the pointer at the specified index within the childPointers
-         * instance variable. As a result of the insert, some pointers may be
-         * shifted to the right of the index.
-         * @param pointer: the Node pointer to be inserted
-         * @param index: the index at which the insert is to take place
-         */
-        private void insertChildPointer(Node pointer, int index) {
-            for (int i = degree - 1; i >= index ;i--) {
+        private void insertChildPointer(Node<K, V> pointer, int index) {
+            for (int i = degree - 1; i >= index; i--) {
                 childPointers[i + 1] = childPointers[i];
             }
             this.childPointers[index] = pointer;
             this.degree++;
         }
 
-        /**
-         * This simple method determines if the InternalNode is deficient or not.
-         * An InternalNode is deficient when its current degree of children falls
-         * below the allowed minimum.
-         * @return a boolean indicating whether the InternalNode is deficient
-         * or not
-         */
-        private boolean isDeficient() {
-            return this.degree < this.minDegree;
-        }
-
-        /**
-         * This simple method determines if the InternalNode is capable of
-         * lending one of its dictionary pairs to a deficient node. An InternalNode
-         * can give away a dictionary pair if its current degree is above the
-         * specified minimum.
-         * @return a boolean indicating whether or not the InternalNode has
-         * enough dictionary pairs in order to give one away.
-         */
-        private boolean isLendable() { return this.degree > this.minDegree; }
-
-        /**
-         * This simple method determines if the InternalNode is capable of being
-         * merged with. An InternalNode can be merged with if it has the minimum
-         * degree of children.
-         * @return a boolean indicating whether or not the InternalNode can be
-         * merged with
-         */
-        private boolean isMergeable() { return this.degree == this.minDegree; }
-
-        /**
-         * This simple method determines if the InternalNode is considered overfull,
-         * i.e. the InternalNode object's current degree is one more than the
-         * specified maximum.
-         * @return a boolean indicating if the InternalNode is overfull
-         */
         private boolean isOverfull() {
             return this.degree == maxDegree + 1;
         }
 
-        /**
-         * Given a pointer to a Node object, this method inserts the pointer to
-         * the beginning of the childPointers instance variable.
-         * @param pointer: the Node object to be prepended within childPointers
-         */
-        private void prependChildPointer(Node pointer) {
-            for (int i = degree - 1; i >= 0 ;i--) {
-                childPointers[i + 1] = childPointers[i];
-            }
-            this.childPointers[0] = pointer;
-            this.degree++;
-        }
 
-        /**
-         * This method sets keys[index] to null. This method is used within the
-         * parent of a merging, deficient LeafNode.
-         * @param index: the location within keys to be set to null
-         */
-        private void removeKey(int index) { this.keys[index] = null; }
-
-        /**
-         * This method sets childPointers[index] to null and additionally
-         * decrements the current degree of the InternalNode.
-         * @param index: the location within childPointers to be set to null
-         */
         private void removePointer(int index) {
             this.childPointers[index] = null;
             this.degree--;
         }
 
-        /**
-         * This method removes 'pointer' from the childPointers instance
-         * variable and decrements the current degree of the InternalNode. The
-         * index where the pointer node was assigned is set to null.
-         * @param pointer: the Node pointer to be removed from childPointers
-         */
-        private void removePointer(Node pointer) {
+        private void removeKey(int index) { this.keys[index] = null; }
+
+        private void removePointer(Node<K, V> pointer) {
             for (int i = 0; i < childPointers.length; i++) {
                 if (childPointers[i] == pointer) { this.childPointers[i] = null; }
             }
             this.degree--;
         }
 
-        /**
-         * Constructor
-         * @param m: the max degree of the InternalNode
-         * @param keys: the list of keys that InternalNode is initialized with
-         */
-        private InternalNode(int m, K[] keys) {
-            this.maxDegree = m;
-            this.minDegree = (int)Math.ceil(m/2.0);
-            this.degree = 0;
-            this.keys = keys;
-            this.childPointers = (Node[]) Array.newInstance(new Node().getClass(), this.maxDegree + 1);
+        private boolean isDeficient() {
+            return this.degree < this.minDegree;
         }
 
-        /**
-         * Constructor
-         * @param m: the max degree of the InternalNode
-         * @param keys: the list of keys that InternalNode is initialized with
-         * @param pointers: the list of pointers that InternalNode is initialized with
-         */
-        private InternalNode(int m, K[] keys, Node[] pointers) {
-            this.maxDegree = m;
-            this.minDegree = (int)Math.ceil(m/2.0);
-            this.degree = linearNullSearch(pointers);
-            this.keys = keys;
-            this.childPointers = pointers;
+        private boolean isLendable() { return this.degree > this.minDegree; }
+
+        private boolean isMergeable() { return this.degree == this.minDegree; }
+
+        private void prependChildPointer(Node<K, V> pointer) {
+            for (int i = degree - 1; i >= 0 ;i--) {
+                childPointers[i + 1] = childPointers[i];
+            }
+            this.childPointers[0] = pointer;
+            this.degree++;
         }
     }
 
-    /**
-     * This class represents the leaf nodes within the B+ tree that hold
-     * dictionary pairs. The leaf node has no children. The leaf node has a
-     * minimum and maximum number of dictionary pairs it can hold, as specified
-     * by m, the max degree of the B+ tree. The leaf nodes form a doubly linked
-     * list that, i.e. each leaf node has a left and right sibling*/
-    public class LeafNode extends Node {
+    public static class ExternalNode<K, V> extends Node<K, V> {
 
+        protected static class MapEntry<K, V> implements Entry<K, V> {
 
-        /**
-         * This class represents a dictionary pair that is to be contained within the
-         * leaf nodes of the B+ tree. The class implements the Comparable interface
-         * so that the DictionaryPair objects can be sorted later on.
-         */
-        protected static class DictionaryPair<K, V> implements Entry<K, V> {
             private K k;
             private V v;
 
-            /**
-             * Constructor
-             * @param key: the key of the key-value pair
-             * @param value: the value of the key-value pair
-             */
-            public DictionaryPair(K key, V value) {
+            public MapEntry(K key, V value) {
                 k = key;
                 v = value;
             }
@@ -249,36 +141,26 @@ class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
 
         }
 
-        int maxNumPairs;
-        int minNumPairs;
-        int numPairs;
-        LeafNode leftSibling;
-        LeafNode rightSibling;
-        DictionaryPair<K, V>[] dictionary;
+        MapEntry<K, V>[] map;
+        private Comparator<Entry<K, V>> comp;
 
-        /**
-         * Given an index, this method sets the dictionary pair at that index
-         * within the dictionary to null.
-         * @param index: the location within the dictionary to be set to null
-         */
-        public void delete(int index) {
-
-            // Delete dictionary pair from leaf
-            this.dictionary[index] = null;
-
-            // Decrement numPairs
-            numPairs--;
+        public ExternalNode(int m, K k, V v,Comparator<Entry<K, V>> comp) {  // insert dp in map and then pass it here
+            super(m - 1, (int) (Math.ceil(m / 2.0) - 1), 0);
+            this.map = new MapEntry[m];
+            this.insertExternal(k, v,comp);  //
+            this.comp=comp;
         }
 
-        /**
-         * This method attempts to insert a dictionary pair within the dictionary
-         * of the LeafNode object. If it succeeds, numPairs increments, the
-         * dictionary is sorted, and the boolean true is returned. If the method
-         * fails, the boolean false is returned.
-         * @param dp: the dictionary pair to be inserted
-         * @return a boolean indicating whether or not the insert was successful
-         */
-        public boolean insert(Entry<K, V> dp) {
+
+        public ExternalNode(int m, Entry<K, V>[] dps, InternalNode<K, V> parent, int dg) {  // calc dg using linear
+            super(m - 1, (int) (Math.ceil(m / 2.0) - 1), dg);
+            this.map = (MapEntry<K, V>[]) dps;  //
+            this.parent = parent;
+        }
+
+        public boolean insertExternal(K k, V v,Comparator<Entry<K, V>> comp) {
+            MapEntry<K, V> newEntry = new MapEntry<>(k, v);
+
             if (this.isFull()) {
 
                 /* Flow of execution goes here when numPairs == maxNumPairs */
@@ -287,105 +169,353 @@ class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
             } else {
 
                 // Insert dictionary pair, increment numPairs, sort dictionary
-                this.dictionary[numPairs] = (DictionaryPair<K, V>) dp;
-                numPairs++;
-                Arrays.sort(this.dictionary, 0, numPairs);
+                degree++;
+                this.map[degree] = newEntry;
+                Arrays.sort(this.map, 0, degree,comp);
 
                 return true;
             }
         }
 
+        public boolean isFull() {
+            return degree == maxDegree;
+        }
 
-        /**
-         * This simple method determines if the LeafNode is deficient, i.e.
-         * the numPairs within the LeafNode object is below minNumPairs.
-         * @return a boolean indicating whether or not the LeafNode is deficient
-         */
-        public boolean isDeficient() { return numPairs < minNumPairs; }
+        public void insertExternal1(K k, V v, Comparator<Entry<K, V>> comp) {
 
-        /**
-         * This simple method determines if the LeafNode is full, i.e. the
-         * numPairs within the LeafNode is equal to the maximum number of pairs.
-         * @return a boolean indicating whether or not the LeafNode is full
-         */
-        public boolean isFull() { return numPairs == maxNumPairs; }
+            // Sort all the dictionary pairs with the included pair to be inserted
+            map[degree] = new MapEntry<>(k, v);
+            this.degree++;
+            this.sortMap(comp);
 
-        /**
-         * This simple method determines if the LeafNode object is capable of
-         * lending a dictionary pair to a deficient leaf node. The LeafNode
-         * object can lend a dictionary pair if its numPairs is greater than
-         * the minimum number of pairs it can hold.
-         * @return a boolean indicating whether or not the LeafNode object can
-         * give a dictionary pair to a deficient leaf node
-         */
-        public boolean isLendable() { return numPairs > minNumPairs; }
+            // Split the sorted pairs into two halves
+            int midpoint = midPoint;
+            MapEntry<K, V>[] halfDict = splitDictionary(this, midpoint);
 
-        /**
-         * This simple method determines if the LeafNode object is capable of
-         * being merged with, which occurs when the number of pairs within the
-         * LeafNode object is equal to the minimum number of pairs it can hold.
-         * @return a boolean indicating whether or not the LeafNode object can
-         * be merged with
-         */
+            if (this.parent == null) {
+
+                /* Flow of execution goes here when there is 1 node in tree */
+
+                // Create internal node to serve as parent, use dictionary midpoint key
+                K[] parent_keys = (K[])Array.newInstance(k.getClass(),this.maxDegree);  //
+                parent_keys[0] = halfDict[0].getKey();
+                InternalNode<K, V> parent = new InternalNode<K, V>(this.maxDegree, parent_keys);
+                this.parent = parent;
+                parent.appendChildPointer(this);
+
+            } else {
+
+                /* Flow of execution goes here when parent exists */
+
+                // Add new key to parent for proper indexing
+                K newParentKey = halfDict[1].getKey();
+                this.parent.keys[this.parent.degree - 1] = newParentKey;
+                Arrays.sort(this.parent.keys, 0, this.parent.degree);
+            }
+
+            // Create new LeafNode that holds the other half
+            ExternalNode<K, V> newLeafNode = new ExternalNode<K, V>(this.maxDegree, halfDict, this.parent, linearNullSearch(halfDict));
+
+            // Update child pointers of parent node
+            int pointerIndex = this.parent.findIndexOfPointer(this) + 1;
+            this.parent.insertChildPointer(newLeafNode, pointerIndex);
+
+            // Make leaf nodes siblings of one another
+            newLeafNode.rightSibling = this.rightSibling;
+            if (newLeafNode.rightSibling != null) {
+                newLeafNode.rightSibling.leftSibling = newLeafNode;
+            }
+            this.rightSibling = newLeafNode;
+            newLeafNode.leftSibling = this;
+        }
+
+
+        private void sortMap(Comparator<Entry<K, V>> comp) { //
+
+            Arrays.sort(map, comp);
+        }
+
+        private MapEntry<K, V>[] splitDictionary(ExternalNode<K, V> ln, int split) {
+
+            MapEntry<K, V>[] dictionary = ln.map;
+
+		/* Initialize two dictionaries that each hold half of the original
+		   dictionary values */
+            MapEntry<K, V>[] halfDict = new MapEntry[this.maxDegree];
+
+            // Copy half of the values into halfDict
+            for (int i = split; i < dictionary.length; i++) {
+                halfDict[i - split] = dictionary[i];
+                ln.delete(i);
+            }
+
+            return halfDict;
+        }
+
+        public Entry<K, V> delete(int index) {
+
+            Entry<K, V> rem = this.map[index];
+
+            // Delete dictionary pair from leaf
+            this.map[index] = null;
+
+            // Decrement numPairs
+            degree--;
+
+            return rem;
+        }
+
+        public boolean isDeficient() {
+            return degree < minDegree;
+        }
+
+        public boolean isLendable() {
+            return degree > minDegree;
+        }
+
+        public void deleteExternal1(Comparator<K> keyComp, ExternalNode<K, V> exn, InternalNode<K, V> root, Comparator<Entry<K, V>> comp) {
+
+            ExternalNode<K, V> sibling;
+            InternalNode<K, V> parent = this.parent;
+
+            // Borrow: First, check the left sibling, then the right sibling
+            if (this.leftSibling != null &&
+                    this.leftSibling.parent == this.parent &&
+                    ((ExternalNode<K, V>)(this.leftSibling)).isLendable()) {
+
+                sibling = (ExternalNode<K, V>) this.leftSibling;
+                MapEntry<K, V> borrowedDP = sibling.map[sibling.degree - 1];
+
+						/* Insert borrowed dictionary pair, sort dictionary,
+						   and delete dictionary pair from sibling */
+                this.insertExternal(borrowedDP.getKey(), borrowedDP.getValue(),comp);  /////////////
+                this.sortMap(comp);
+                sibling.delete(sibling.degree - 1);
+
+                // Update key in parent if necessary
+                int pointerIndex = findIndexOfPointer(parent.childPointers, this);
+                if(keyComp.compare(borrowedDP.getKey(), parent.keys[pointerIndex - 1]) < 0) {
+                    parent.keys[pointerIndex - 1] = this.map[0].getKey();
+                }
+
+            } else if (this.rightSibling != null &&
+                    this.rightSibling.parent == this.parent &&
+                    ((ExternalNode<K, V>)(this.rightSibling)).isLendable()) {
+
+                sibling = (ExternalNode<K, V>) this.rightSibling;
+                MapEntry<K, V> borrowedDP = sibling.map[0];
+
+						/* Insert borrowed dictionary pair, sort dictionary,
+					       and delete dictionary pair from sibling */
+                this.insertExternal(borrowedDP.getKey(), borrowedDP.getValue(),comp);  /////
+                sibling.delete(0);
+                sibling.sortMap(comp);
+
+                // Update key in parent if necessary
+                int pointerIndex = findIndexOfPointer(parent.childPointers, this);
+                if(keyComp.compare(borrowedDP.getKey(), parent.keys[pointerIndex]) >= 0) {
+                    parent.keys[pointerIndex] = sibling.map[0].getKey();
+                }
+
+            }
+
+            // Merge: First, check the left sibling, then the right sibling
+            else if (this.leftSibling != null &&
+                    this.leftSibling.parent == this.parent &&
+                    ((ExternalNode<K, V>)this.leftSibling).isMergeable()) {
+
+                sibling = (ExternalNode<K, V>) this.leftSibling;
+                int pointerIndex = findIndexOfPointer(parent.childPointers, this);
+
+                // Remove key and child pointer from parent
+                parent.removeKey(pointerIndex - 1);
+                parent.removePointer(this);
+
+                // Update sibling pointer
+                sibling.rightSibling = this.rightSibling;
+
+                // Check for deficiencies in parent
+                if (parent.isDeficient()) {
+                    handleDeficiency(parent, root);
+                }
+
+            } else if (this.rightSibling != null &&
+                    this.rightSibling.parent == this.parent &&
+                    ((ExternalNode<K, V>)this.rightSibling).isMergeable()) {
+
+                sibling = (ExternalNode<K, V>) this.rightSibling;
+                int pointerIndex = findIndexOfPointer(parent.childPointers, this);
+
+                // Remove key and child pointer from parent
+                parent.removeKey(pointerIndex);
+                parent.removePointer(pointerIndex);
+
+                // Update sibling pointer
+                sibling.leftSibling = this.leftSibling;
+                if (sibling.leftSibling == null) {
+                    exn = sibling;
+                }
+
+                if (parent.isDeficient()) {
+                    handleDeficiency(parent, root);
+                }
+
+            }
+        }
+
+        private int findIndexOfPointer(Node<K, V>[] pointers, ExternalNode<K, V> node) {
+            int i;
+            for (i = 0; i < pointers.length; i++) {
+                if (pointers[i] == node) { break; }
+            }
+            return i;
+        }
+
         public boolean isMergeable() {
-            return numPairs == minNumPairs;
+            return degree == minDegree;
         }
 
-        /**
-         * Constructor
-         * @param m: order of B+ tree that is used to calculate maxNumPairs and
-         *           minNumPairs
-         * @param dp: first dictionary pair insert into new node
-         */
-        public LeafNode(int m, Entry<K, V> dp) {
-            this.maxNumPairs = m - 1;
-            this.minNumPairs = (int)(Math.ceil(m/2.0) - 1);
-            this.dictionary = new DictionaryPair[m];
-//                    (DictionaryPair[])Array.newInstance(new DictionaryPair<>(key,value).getClass(),m);
-            this.numPairs = 0;
-            this.insert(dp);
+        private void handleDeficiency(InternalNode<K, V> in, InternalNode<K, V> root) {
+
+            InternalNode<K, V> sibling;
+            InternalNode<K, V> parent = in.parent;
+
+            // Remedy deficient root node
+            if (root == in) {
+                for (int i = 0; i < in.childPointers.length; i++) {
+                    if (in.childPointers[i] != null) {
+                        if (in.childPointers[i] instanceof InternalNode<K, V>) {
+                            root = (InternalNode<K, V>) in.childPointers[i];
+                            root.parent = null;
+                        } else if (in.childPointers[i] instanceof ExternalNode<K, V>) {
+                            root = null;
+                        }
+                    }
+                }
+            }
+
+            // Borrow:
+            else if (in.leftSibling != null && ((InternalNode<K, V>) in.leftSibling).isLendable()) {
+                sibling = (InternalNode<K, V>) in.leftSibling;
+            } else if (in.rightSibling != null && ((InternalNode<K, V>) in.rightSibling).isLendable()) {
+                sibling = (InternalNode<K, V>) in.rightSibling;
+
+                // Copy 1 key and pointer from sibling (atm just 1 key)
+                K borrowedKey = sibling.keys[0];
+                Node<K, V> pointer = sibling.childPointers[0];
+
+                // Copy root key and pointer into parent
+                in.keys[in.degree - 1] = parent.keys[0];
+                in.childPointers[in.degree] = pointer;
+
+                // Copy borrowedKey into root
+                parent.keys[0] = borrowedKey;
+
+                // Delete key and pointer from sibling
+                sibling.removePointer(0);
+                Arrays.sort(sibling.keys);
+                sibling.removePointer(0);
+                shiftDown(in.childPointers);
+            }
+
+            // Merge:
+            else if (in.leftSibling != null && ((InternalNode<K, V>) in.leftSibling).isMergeable()) {
+
+            } else if (in.rightSibling != null && ((InternalNode<K, V>) in.rightSibling).isMergeable()) {
+                sibling = (InternalNode<K, V>) in.rightSibling;
+
+                // Copy rightmost key in parent to beginning of sibling's keys &
+                // delete key from parent
+                sibling.keys[sibling.degree - 1] = parent.keys[parent.degree - 2];
+                Arrays.sort(sibling.keys, 0, sibling.degree);
+                parent.keys[parent.degree - 2] = null;
+
+                // Copy in's child pointer over to sibling's list of child pointers
+                for (int i = 0; i < in.childPointers.length; i++) {
+                    if (in.childPointers[i] != null) {
+                        sibling.prependChildPointer(in.childPointers[i]);
+                        in.childPointers[i].parent = sibling;
+                        in.removePointer(i);
+                    }
+                }
+
+                // Delete child pointer from grandparent to deficient node
+                parent.removePointer(in);
+
+                // Remove left sibling
+                sibling.leftSibling = in.leftSibling;
+            }
+
+            // Handle deficiency a level up if it exists
+            if (parent != null && parent.isDeficient()) {
+                handleDeficiency(parent, root);
+            }
+
+        }
+        private void shiftDown(Node<K, V>[] pointers) {  //
+            Node<K, V>[] newPointers = new Node[this.maxDegree + 1];
+            for (int i = 1; i < pointers.length; i++) {
+                newPointers[i - 1] = pointers[i];
+            }
+            pointers = newPointers;
         }
 
-        /**
-         * Constructor
-         * @param dps: list of DictionaryPair objects to be immediately inserted
-         *             into new LeafNode object
-         * @param m: order of B+ tree that is used to calculate maxNumPairs and
-         * 		     minNumPairs
-         * @param parent: parent of newly created child LeafNode
-         */
-        public LeafNode(int m, Entry<K, V>[] dps, InternalNode parent) {
-            this.maxNumPairs = m - 1;
-            this.minNumPairs = (int)(Math.ceil(m/2.0) - 1);
-            this.dictionary = (DictionaryPair<K, V>[]) dps;
-            this.numPairs = linearNullSearch(dps);
-            this.parent = parent;
+        private int linearNullSearch(MapEntry<K, V>[] dps) {
+            for (int i = 0; i <  dps.length; i++) {
+                if (dps[i] == null) { return i; }
+            }
+            return -1;
+        }
+
+        public Entry<K, V> findEntry(K k, V v) {
+            for (int i=0; i< map.length; i++) {
+                if (map[i]!=null){
+                    if(map[i].getKey() == k && map[i].getValue() == v) {
+                        return map[i];
+                    }
+                }
+            } return null;
+        }
+        // is full & is lendable & .. can be here
+    }
+    private int m;
+    private InternalNode<K, V> root;
+    private ExternalNode<K, V> firstEx;
+    private K key;
+    public ArrayBPTree(int m, K k, Comparator<K> comp) {
+        super(comp);
+        this.m = m;
+        this.root = null;
+        this.key = k;
+    }
+    @Override
+    public V search(K key) {
+
+        // If B+ tree is completely empty, simply return null
+        if (isEmpty()) {
+            return null;
+        }
+
+        // Find leaf node that holds the dictionary key
+        ExternalNode<K, V> ln = (this.root == null) ? this.firstEx : findExternalNode(key);
+
+        // Perform binary search to find index of key within dictionary
+        Entry<K, V>[] dps = ln.map;
+        int index = binarySearch(dps, ln.degree, key);
+
+        // If index negative, the key doesn't exist in B+ tree
+        if (index < 0) {
+            return null;
+        } else {
+            return dps[index].getValue();
         }
     }
 
-    /*~~~~~~~~~~~~~~~~ HELPER FUNCTIONS ~~~~~~~~~~~~~~~~*/
-
-    /**
-     * This method performs a standard binary search on a sorted
-     * DictionaryPair[] and returns the index of the dictionary pair
-     * with target key t if found. Otherwise, this method returns a negative
-     * value.
-     * @param dps: list of dictionary pairs sorted by key within leaf node
-     * @param t: target key value of dictionary pair being searched for
-     * @return index of the target value if found, else a negative value
-     */
-    private int binarySearch(Entry<K,V>[] dps, int numPairs, K t) {
-        return Arrays.binarySearch(dps, 0, numPairs, dps[0], this.getComp());
+    private boolean isEmpty() {
+        return firstEx == null;
     }
 
-    /**
-     * This method starts at the root of the B+ tree and traverses down the
-     * tree via key comparisons to the corresponding leaf node that holds 'key'
-     * within its dictionary.
-     * @param key: the unique key that lies within the dictionary of a LeafNode object
-     * @return the LeafNode object that contains the key within its dictionary
-     */
-    private LeafNode findLeafNode(K key) {
+    private ExternalNode<K, V> findExternalNode(K key) {
 
         // Initialize keys and index variable
         K[] keys = this.root.keys;
@@ -393,20 +523,22 @@ class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
 
         // Find next node on path to appropriate leaf node
         for (i = 0; i < this.root.degree - 1; i++) {
-            if (getKeyComp().compare(key,keys[i])<0) { break; }
+            if (getKeyComp().compare(key, keys[i]) < 0) {
+                break;
+            }
         }
 
 		/* Return node if it is a LeafNode object,
 		   otherwise repeat the search function a level down */
-        Node child = this.root.childPointers[i];
-        if (child instanceof LeafNode) {
-            return (LeafNode)child;
+        Node<K, V> child = this.root.childPointers[i];
+        if (child instanceof ExternalNode<K, V>) {
+            return (ExternalNode<K, V>) child;
         } else {
-            return findLeafNode((InternalNode)child, key);
+            return findExternalNode((InternalNode<K, V>) child, key);
         }
     }
 
-    private LeafNode findLeafNode(InternalNode node, K key) {
+    private ExternalNode<K, V> findExternalNode(InternalNode<K, V> node, K key) {
 
         // Initialize keys and index variable
         K[] keys = node.keys;
@@ -414,241 +546,120 @@ class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
 
         // Find next node on path to appropriate leaf node
         for (i = 0; i < node.degree - 1; i++) {
-            if (getKeyComp().compare(key,keys[i])<0) { break; }
+            if (getKeyComp().compare(key, keys[i]) < 0) {
+                break;
+            }
         }
 
 		/* Return node if it is a LeafNode object,
 		   otherwise repeat the search function a level down */
-        Node childNode = node.childPointers[i];
-        if (childNode instanceof LeafNode) {
-            return (LeafNode)childNode;
+        Node<K, V> childNode = node.childPointers[i];
+        if (childNode instanceof ExternalNode<K, V>) {
+            return (ExternalNode<K, V>) childNode;
         } else {
-            return findLeafNode((InternalNode)node.childPointers[i], key);
+            return findExternalNode((InternalNode<K, V>) node.childPointers[i], key);
         }
     }
+    private int binarySearch(Entry<K, V>[] dps, int numPairs, K t) {
+        return Arrays.binarySearch(dps, 0, numPairs, dps[0], this.getComp());
+    }
 
-    /**
-     * Given a list of pointers to Node objects, this method returns the index of
-     * the pointer that points to the specified 'node' LeafNode object.
-     * @param pointers: a list of pointers to Node objects
-     * @param node: a specific pointer to a LeafNode
-     * @return (int) index of pointer in list of pointers
-     */
-    private int findIndexOfPointer(Node[] pointers, LeafNode node) {
-        int i;
-        for (i = 0; i < pointers.length; i++) {
-            if (pointers[i] == node) { break; }
+    public ArrayList<V> search(K lowerBound, K upperBound) {
+
+        // Instantiate Double array to hold values
+        ArrayList<V> values = new ArrayList<V>();
+
+        // Iterate through the doubly linked list of leaves
+        ExternalNode<K, V> currNode = this.firstEx;
+        while (currNode != null) {
+
+            // Iterate through the dictionary of each node
+            ExternalNode.MapEntry<K, V> dps[] = currNode.map;
+            for (ExternalNode.MapEntry<K, V> dp : dps) {
+
+				/* Stop searching the dictionary once a null value is encountered
+				   as this the indicates the end of non-null values */
+                if (dp == null) {
+                    break;
+                }
+
+                // Include value if its key fits within the provided range
+                if (super.getKeyComp().compare(lowerBound, dp.getKey()) <= 0 && super.getKeyComp().compare(dp.getKey(), upperBound) <= 0) {
+                    values.add(dp.getValue());
+                }
+            }
+
+			/* Update the current node to be the right sibling,
+			   leaf traversal is from left to right */
+            currNode = (ExternalNode<K, V>) currNode.rightSibling;
+
         }
-        return i;
+        return values;
     }
+    public Entry<K, V> insert(K key, V value) {
 
-    /**
-     * This is a simple method that returns the midpoint (or lower bound
-     * depending on the context of the method invocation) of the max degree m of
-     * the B+ tree.
-     * @return (int) midpoint/lower bound
-     */
-    private int getMidpoint() {
-        return (int)Math.ceil((this.m + 1) / 2.0) - 1;
-    }
+        Entry<K, V> newEntry = null;
 
-    /**
-     * Given a deficient InternalNode in, this method remedies the deficiency
-     * through borrowing and merging.
-     * @param in: a deficient InternalNode
-     */
-    private void handleDeficiency(InternalNode in) {
+        if (isEmpty()) {
 
-        InternalNode sibling;
-        InternalNode parent = in.parent;
+            /* Flow of execution goes here only when first insert takes place */
 
-        // Remedy deficient root node
-        if (this.root == in) {
-            for (int i = 0; i < in.childPointers.length; i++) {
-                if (in.childPointers[i] != null) {
-                    if (in.childPointers[i] instanceof InternalNode) {
-                        this.root = (InternalNode)in.childPointers[i];
-                        this.root.parent = null;
-                    } else if (in.childPointers[i] instanceof LeafNode) {
-                        this.root = null;
+            // Create leaf node as first node in B plus tree (root is null)
+
+            // Set as first leaf node (can be used later for in-order leaf traversal)
+            this.firstEx = new ExternalNode<K, V>(this.m, key, value,getComp());
+
+        } else {
+
+            // Find leaf node to insert into
+            ExternalNode<K, V> ln = (this.root == null) ? this.firstEx : findExternalNode(key);
+
+            // Insert into leaf node fails if node becomes overfull
+            if (!ln.insertExternal(key, value,getComp())) {
+                ln.insertExternal1(key, value, super.getComp());
+
+                if (this.root == null) {
+
+                    // Set the root of B+ tree to be the parent
+                    this.root = ln.parent;
+
+                } else {
+
+					/* If parent is overfull, repeat the process up the tree,
+			   		   until no deficiencies are found */
+                    InternalNode<K, V> in = ln.parent;
+                    while (in != null) {
+                        if (in.isOverfull()) {
+                            splitInternalNode(in);
+                        } else {
+                            break;
+                        }
+                        in = in.parent;
                     }
                 }
-            }
-        }
-
-        // Borrow:
-        else if (in.leftSibling != null && in.leftSibling.isLendable()) {
-            sibling = in.leftSibling;
-        } else if (in.rightSibling != null && in.rightSibling.isLendable()) {
-            sibling = in.rightSibling;
-
-            // Copy 1 key and pointer from sibling (atm just 1 key)
-            K borrowedKey = sibling.keys[0];
-            Node pointer = sibling.childPointers[0];
-
-            // Copy root key and pointer into parent
-            in.keys[in.degree - 1] = parent.keys[0];
-            in.childPointers[in.degree] = pointer;
-
-            // Copy borrowedKey into root
-            parent.keys[0] = borrowedKey;
-
-            // Delete key and pointer from sibling
-            sibling.removePointer(0);
-            Arrays.sort(sibling.keys);
-            sibling.removePointer(0);
-            shiftDown(in.childPointers, 1);
-        }
-
-        // Merge:
-        else if (in.leftSibling != null && in.leftSibling.isMergeable()) {
-
-        } else if (in.rightSibling != null && in.rightSibling.isMergeable()) {
-            sibling = in.rightSibling;
-
-            // Copy rightmost key in parent to beginning of sibling's keys &
-            // delete key from parent
-            sibling.keys[sibling.degree - 1] = parent.keys[parent.degree - 2];
-            Arrays.sort(sibling.keys, 0, sibling.degree);
-            parent.keys[parent.degree - 2] = null;
-
-            // Copy in's child pointer over to sibling's list of child pointers
-            for (int i = 0; i < in.childPointers.length; i++) {
-                if (in.childPointers[i] != null) {
-                    sibling.prependChildPointer(in.childPointers[i]);
-                    in.childPointers[i].parent = sibling;
-                    in.removePointer(i);
-                }
-            }
-
-            // Delete child pointer from grandparent to deficient node
-            parent.removePointer(in);
-
-            // Remove left sibling
-            sibling.leftSibling = in.leftSibling;
-        }
-
-        // Handle deficiency a level up if it exists
-        if (parent != null && parent.isDeficient()) {
-            handleDeficiency(parent);
-        }
+            } newEntry = ln.findEntry(key, value);
+        } return newEntry;
     }
-
-    /**
-     * This is a simple method that determines if the B+ tree is empty or not.
-     * @return a boolean indicating if the B+ tree is empty or not
-     */
-    private boolean isEmpty() {
-        return firstLeaf == null;
-    }
-
-    /**
-     * This method is used to shift down a set of pointers that are prepended
-     * by null values.
-     * @param pointers: the list of pointers that are to be shifted
-     * @param amount: the amount by which the pointers are to be shifted
-     */
-    private void shiftDown(Node[] pointers, int amount) {
-        Node[] newPointers = (Node[]) Array.newInstance(new Node().getClass(),this.m + 1);
-        for (int i = amount; i < pointers.length; i++) {
-            newPointers[i - amount] = pointers[i];
-        }
-        pointers = newPointers;
-    }
-
-    /**
-     * This is a specialized sorting method used upon lists of DictionaryPairs
-     * that may contain interspersed null values.
-     * @param dictionary: a list of DictionaryPair objects
-     */
-    private void sortDictionary(Entry<K,V>[] dictionary) {
-        Arrays.sort(dictionary, new Comparator<Entry<K,V>>() {
-            @Override
-            public int compare(Entry<K,V> o1, Entry<K,V> o2) {
-                if (o1 == null && o2 == null) { return 0; }
-                if (o1 == null) { return 1; }
-                if (o2 == null) { return -1; }
-                return getComp().compare(o1,o2);
-            }
-        });
-    }
-
-    /**
-     * This method modifies the InternalNode 'in' by removing all pointers within
-     * the childPointers after the specified split. The method returns the removed
-     * pointers in a list of their own to be used when constructing a new
-     * InternalNode sibling.
-     * @param in: an InternalNode whose childPointers will be split
-     * @param split: the index at which the split in the childPointers begins
-     * @return a Node[] of the removed pointers
-     */
-    private Node[] splitChildPointers(InternalNode in, int split) {
-
-        Node[] pointers = in.childPointers;
-        Node[] halfPointers = (Node[])Array.newInstance(new Node().getClass(),this.m + 1);
-
-        // Copy half of the values into halfPointers while updating original keys
-        for (int i = split + 1; i < pointers.length; i++) {
-            halfPointers[i - split - 1] = pointers[i];
-            in.removePointer(i);
-        }
-
-        return halfPointers;
-    }
-
-    /**
-     * This method splits a single dictionary into two dictionaries where all
-     * dictionaries are of equal length, but each of the resulting dictionaries
-     * holds half of the original dictionary's non-null values. This method is
-     * primarily used when splitting a node within the B+ tree. The dictionary of
-     * the specified LeafNode is modified in place. The method returns the
-     * remainder of the DictionaryPairs that are no longer within ln's dictionary.
-     * @param ln: list of DictionaryPairs to be split
-     * @param split: the index at which the split occurs
-     * @return DictionaryPair[] of the two split dictionaries
-     */
-    private Entry<K,V>[] splitDictionary(LeafNode ln, int split) {
-
-        Entry<K,V>[] dictionary = ln.dictionary;
-
-		/* Initialize two dictionaries that each hold half of the original
-		   dictionary values */
-        Entry[] halfDict =new Entry[this.m];
-
-        // Copy half of the values into halfDict
-        for (int i = split; i < dictionary.length; i++) {
-            halfDict[i - split] = dictionary[i];
-            ln.delete(i);
-        }
-
-        return halfDict;
-    }
-
-    /**
-     * When an insertion into the B+ tree causes an overfull node, this method
-     * is called to remedy the issue, i.e. to split the overfull node. This method
-     * calls the sub-methods of splitKeys() and splitChildPointers() in order to
-     * split the overfull node.
-     * @param in: an overfull InternalNode that is to be split
-     */
-    private void splitInternalNode(InternalNode in) {
+    private void splitInternalNode(InternalNode<K, V> in) {
 
         // Acquire parent
-        InternalNode parent = in.parent;
+        InternalNode<K, V> parent = in.parent;
 
         // Split keys and pointers in half
         int midpoint = getMidpoint();
         K newParentKey = in.keys[midpoint];
         K[] halfKeys = splitKeys(in.keys, midpoint);
-        Node[] halfPointers = splitChildPointers(in, midpoint);
+        Node<K, V>[] halfPointers = splitChildPointers(in, midpoint);
 
         // Change degree of original InternalNode in
         in.degree = linearNullSearch(in.childPointers);
 
         // Create new sibling internal node and add half of keys and pointers
-        InternalNode sibling = new InternalNode(this.m, halfKeys, halfPointers);
-        for (Node pointer : halfPointers) {
-            if (pointer != null) { pointer.parent = sibling; }
+        InternalNode<K, V> sibling = new InternalNode<K, V>(this.m, halfKeys, halfPointers, linearNullSearch(halfPointers));
+        for (Node<K, V> pointer : halfPointers) {
+            if (pointer != null) {
+                pointer.parent = sibling;
+            }
         }
 
         // Make internal nodes siblings of one another
@@ -662,9 +673,9 @@ class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
         if (parent == null) {
 
             // Create new root node and add midpoint key and pointers
-            K[] keys = (K[])Array.newInstance(key.getClass(),this.m);
+            K[] keys = (K[])Array.newInstance(this.key.getClass(),this.m);
             keys[0] = newParentKey;
-            InternalNode newRoot = new InternalNode(this.m, keys);
+            InternalNode<K, V> newRoot = new InternalNode<K, V>(this.m, keys);
             newRoot.appendChildPointer(in);
             newRoot.appendChildPointer(sibling);
             this.root = newRoot;
@@ -686,17 +697,9 @@ class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
         }
     }
 
-    /**
-     * This method modifies a list of Integer-typed objects that represent keys
-     * by removing half of the keys and returning them in a separate Integer[].
-     * This method is used when splitting an InternalNode object.
-     * @param keys: a list of Integer objects
-     * @param split: the index where the split is to occur
-     * @return Integer[] of removed keys
-     */
     private K[] splitKeys(K[] keys, int split) {
 
-        K[] halfKeys = (K[])Array.newInstance(key.getClass(),this.m);
+        K[] halfKeys = (K[])Array.newInstance(this.key.getClass(),this.m);
 
         // Remove split-indexed value from keys
         keys[split] = null;
@@ -710,174 +713,136 @@ class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
         return halfKeys;
     }
 
-    /**
-     * This method performs a standard linear search on a sorted
-     * DictionaryPair[] and returns the index of the first null entry found.
-     * Otherwise, this method returns a -1. This method is primarily used in
-     * place of binarySearch() when the target t = null.
-     * @param dps: list of dictionary pairs sorted by key within leaf node
-     * @return index of the target value if found, else -1
-     */
-    private int linearNullSearch(Entry<K, V>[] dps) {
-        for (int i = 0; i <  dps.length; i++) {
-            if (dps[i] == null) { return i; }
+    private Node<K, V>[] splitChildPointers(InternalNode<K, V> in, int split) {
+
+        Node<K, V>[] pointers = in.childPointers;
+        Node<K, V>[] halfPointers = new Node[this.m + 1];
+
+        // Copy half of the values into halfPointers while updating original keys
+        for (int i = split + 1; i < pointers.length; i++) {
+            halfPointers[i - split - 1] = pointers[i];
+            in.removePointer(i);
         }
-        return -1;
+        return halfPointers;
     }
-    /**
-     * This method performs a standard linear search on a list of Node[] pointers
-     * and returns the index of the first null entry found. Otherwise, this
-     * method returns a -1. This method is primarily used in place of
-     * binarySearch() when the target t = null.
-     * @param pointers: list of Node[] pointers
-     * @return index of the target value if found, else -1
-     */
-    private int linearNullSearch(Node[] pointers) {
-        for (int i = 0; i <  pointers.length; i++) {
-            if (pointers[i] == null) { return i; }
+
+    private int linearNullSearch(Node<K, V>[] pointers) {
+        for (int i = 0; i < pointers.length; i++) {
+            if (pointers[i] == null) {
+                return i;
+            }
         }
         return -1;
     }
 
-    /*~~~~~~~~~~~~~~~~ API: DELETE, INSERT, SEARCH ~~~~~~~~~~~~~~~~*/
+    public Entry<K, V> delete(K key) {
+        Entry<K, V> rem = null;
 
-    /**
-     * Given an integer key and floating point value, this method inserts a
-     * dictionary pair accordingly into the B+ tree.
-     * @param key: an integer key to be used in the dictionary pair
-     * @param value: a floating point number to be used in the dictionary pair
-     */
-    @Override
-    public Entry<K,V> insert(K key, V value){
         if (isEmpty()) {
 
-            /* Flow of execution goes here only when first insert takes place */
+            /* Flow of execution goes here when B+ tree has no dictionary pairs */
 
-            // Create leaf node as first node in B plus tree (root is null)
-            Entry<K,V> entry =new LeafNode.DictionaryPair(key, value);
-            LeafNode ln = new LeafNode(this.m,entry );
-
-            // Set as first leaf node (can be used later for in-order leaf traversal)
-            this.firstLeaf = ln;
-            return entry;
+            System.err.println("Invalid Delete: The B+ tree is currently empty.");
 
         } else {
 
-            // Find leaf node to insert into
-            LeafNode ln = (this.root == null) ? this.firstLeaf : findLeafNode(key);
+            // Get leaf node and attempt to find index of key to delete
+            ExternalNode<K, V> ln = (this.root == null) ? this.firstEx : findExternalNode(key);
+            int dpIndex = binarySearch(ln.map, ln.degree, key);
+            if (dpIndex < 0) {
 
-            // Insert into leaf node fails if node becomes overfull
-            Entry<K,V> entry =new LeafNode.DictionaryPair(key, value);
-            if (!ln.insert(entry)) {
+                /* Flow of execution goes here when key is absent in B+ tree */
 
-                // Sort all the dictionary pairs with the included pair to be inserted
-                ln.dictionary[ln.numPairs] = (LeafNode.DictionaryPair) entry;
-                ln.numPairs++;
-                sortDictionary(ln.dictionary);
+                System.err.println("Invalid Delete: Key unable to be found.");
 
-                // Split the sorted pairs into two halves
-                int midpoint = getMidpoint();
-                Entry<K,V>[] halfDict = splitDictionary(ln, midpoint);
+            }
+            else {
 
-                if (ln.parent == null) {
+                // Successfully delete the dictionary pair
+                rem = ln.delete(dpIndex);
 
-                    /* Flow of execution goes here when there is 1 node in tree */
+                // Check for deficiencies
+                if (ln.isDeficient()) {
+                    ln.deleteExternal1(super.getKeyComp(), this.firstEx, root, super.getComp());
+                }
+                else if (this.root == null && this.firstEx.degree == 0) {
 
-                    // Create internal node to serve as parent, use dictionary midpoint key
+					/* Flow of execution goes here when the deleted dictionary
+					   pair was the only pair within the tree */
 
-                    K[] parent_keys = (K[])Array.newInstance(key.getClass(),this.m);
-                    parent_keys[0] = halfDict[0].getKey();
-                    InternalNode parent = new InternalNode(this.m, parent_keys);
-                    ln.parent = parent;
-                    parent.appendChildPointer(ln);
+                    // Set first leaf as null to indicate B+ tree is empty
+                    this.firstEx = null;
 
                 } else {
 
-                    /* Flow of execution goes here when parent exists */
+					/* The dictionary of the LeafNode object may need to be
+					   sorted after a successful delete */
+                    ln.sortMap(super.getComp());
 
-                    // Add new key to parent for proper indexing
-                    K newParentKey = halfDict[0].getKey();
-                    ln.parent.keys[ln.parent.degree - 1] = newParentKey;
-                    Arrays.sort(ln.parent.keys, 0, ln.parent.degree);
                 }
 
-                // Create new LeafNode that holds the other half
-                LeafNode newLeafNode = new LeafNode(this.m, halfDict, ln.parent);
 
-                // Update child pointers of parent node
-                int pointerIndex = ln.parent.findIndexOfPointer(ln) + 1;
-                ln.parent.insertChildPointer(newLeafNode, pointerIndex);
+            }
+        } return rem;
+    }
+    public void delete(ArrayList<Record> records,K key) {
+        // Iterate through the doubly linked list of leaves
+        ExternalNode<K, V> currNode = this.firstEx;
+        while (currNode != null) {
+            Entry<K, V> rem = null;
+            int dpIndex = binarySearch(currNode.map, currNode.degree, key);
 
-                // Make leaf nodes siblings of one another
-                newLeafNode.rightSibling = ln.rightSibling;
-                if (newLeafNode.rightSibling != null) {
-                    newLeafNode.rightSibling.leftSibling = newLeafNode;
-                }
-                ln.rightSibling = newLeafNode;
-                newLeafNode.leftSibling = ln;
+            if (dpIndex>=0){
+                // Iterate through the dictionary of each node
+                ExternalNode.MapEntry<K, V> dps[] = currNode.map;
+                for (ExternalNode.MapEntry<K, V> dp : dps) {
 
-                if (this.root == null) {
+				/* Stop searching the dictionary once a null value is encountered
+				   as this the indicates the end of non-null values */
+                    if (dp == null) {
+                        break;
+                    }
 
-                    // Set the root of B+ tree to be the parent
-                    this.root = ln.parent;
+                    // Include value if its key fits within the provided range
+                    if (records.contains(dp.getValue())) {
+                        rem = currNode.delete(dpIndex);
 
-                } else {
-
-					/* If parent is overfull, repeat the process up the tree,
-			   		   until no deficiencies are found */
-                    InternalNode in = ln.parent;
-                    while (in != null) {
-                        if (in.isOverfull()) {
-                            splitInternalNode(in);
-                        } else {
-                            break;
+                        // Check for deficiencies
+                        if (currNode.isDeficient()) {
+                            currNode.deleteExternal1(super.getKeyComp(), this.firstEx, root, super.getComp());
                         }
-                        in = in.parent;
+                        else if (this.root == null && this.firstEx.degree == 0) {
+
+					/* Flow of execution goes here when the deleted dictionary
+					   pair was the only pair within the tree */
+
+                            // Set first leaf as null to indicate B+ tree is empty
+                            this.firstEx = null;
+
+                        } else {
+
+					/* The dictionary of the LeafNode object may need to be
+					   sorted after a successful delete */
+                            currNode.sortMap(super.getComp());
+
+                        }
                     }
                 }
             }
-            return entry;
+
+			/* Update the current node to be the right sibling,
+			   leaf traversal is from left to right */
+            currNode = (ExternalNode<K, V>) currNode.rightSibling;
+
         }
     }
 
-    /**
-     * Given a key, this method returns the value associated with the key
-     * within a dictionary pair that exists inside the B+ tree.
-     * @param key: the key to be searched within the B+ tree
-     * @return the floating point value associated with the key within the B+ tree
-     */
-    @Override
-    public V search(K key) {
-
-        // If B+ tree is completely empty, simply return null
-        if (isEmpty()) { return null; }
-
-        // Find leaf node that holds the dictionary key
-        LeafNode ln = (this.root == null) ? this.firstLeaf : findLeafNode(key);
-
-        // Perform binary search to find index of key within dictionary
-        Entry<K,V>[] dps = ln.dictionary;
-        int index = binarySearch(dps, ln.numPairs, key);
-
-        // If index negative, the key doesn't exist in B+ tree
-        if (index < 0) {
-            return null;
-        } else {
-            return dps[index].getValue();
-        }
+    private int getMidpoint() {
+        return (int)Math.ceil((this.m + 1) / 2.0) - 1;
     }
 
-    @Override
-    public Entry<K, V> delete(K key) {
-        return null;
+    public K getKey() {
+        return key;
     }
 
-    @Override
-    public ArrayList<V> search(K lowerBound, K upperBound) {
-        return null;
-    }
-
-
-    public static void main(String[] args) {
-    }
 }
