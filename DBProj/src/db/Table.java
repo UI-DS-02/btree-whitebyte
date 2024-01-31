@@ -26,7 +26,6 @@ public class Table {
     public Map<String, ArrayBPTree<?, Record>> getM() {
         return m;
     }
-
     private Map<String, ArrayBPTree<?, Record>> insertCol(Map<String, String> fields) {
 
         Map<String, ArrayBPTree<?, Record>> m = new HashMap<>();
@@ -166,7 +165,32 @@ public class Table {
                 case "Boolean" -> res = bpt.search(Boolean.parseBoolean(e.getValue()), Boolean.parseBoolean(e.getValue()));
                 case "LocalDate" -> {
                     DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-                    bpt.search(LocalDate.parse(e.getValue(),formatter),LocalDate.parse(e.getValue(),formatter));
+                    res=bpt.search(LocalDate.parse(e.getValue(),formatter),LocalDate.parse(e.getValue(),formatter));
+                }
+            }
+            if(!isFirst) {
+                fin.retainAll(res);
+            }else {
+                fin=res;
+            }
+            isFirst=false;
+        } return fin;
+    }
+    public ArrayList<Record> searchRecBound(Map<String, String> query) {
+        ArrayList<Record> res = new ArrayList<>();
+        ArrayList<Record> fin = new ArrayList<>();
+        boolean isFirst = true;
+        for(Map.Entry<String, String> e: query.entrySet()) {
+            ArrayBPTree<Object, Record> bpt =(ArrayBPTree<Object, Record>) m.get(e.getKey());
+            String[] range=e.getValue().split("-");
+            switch (bpt.getKey().getClass().getSimpleName()) {
+                case "Integer" -> res = bpt.search(Integer.parseInt(range[0]), Integer.parseInt(range[1]));
+                case "Double" -> res = bpt.search(Double.parseDouble(range[0]), Double.parseDouble(range[1]));
+                case "String" -> res = bpt.search(range[0], range[1]);
+                case "Boolean" -> res = bpt.search(Boolean.parseBoolean(range[0]), Boolean.parseBoolean(range[1]));
+                case "LocalDate" -> {
+                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+                    res=bpt.search(LocalDate.parse(range[0],formatter),LocalDate.parse(range[1],formatter));
                 }
             }
             if(!isFirst) {
@@ -182,45 +206,36 @@ public class Table {
         for (Record record :res){
             for (Field<?> field :record.getCells()){
                 ArrayBPTree<Object, Record> bpt =(ArrayBPTree<Object, Record>) m.get(field.getName());
-                bpt.delete(res,field.getValue());
+                bpt.delete(record,field.getValue(),field.getValue());
             }
         }
     }
-    public static void main(String[] args) {
-        HashMap<String,String> b=new HashMap<>();
-        b.put("asd","Integer");
-        b.put("asf","Integer");
-        Table table=new Table("asd",b);
-        HashMap<String,String> c=new HashMap<>();
-        c.put("asd","14");
-        c.put("asf","5");
-        table.insertRec(c);
-        HashMap<String,String> f=new HashMap<>();
-        f.put("asd","14");
-        f.put("asf","6");
-        table.insertRec(f);
-        HashMap<String,String> g=new HashMap<>();
-        g.put("asd","13");
-        g.put("asf","7");
-        table.insertRec(g);
-        HashMap<String,String> h=new HashMap<>();
-        h.put("asd","12");
-        h.put("asf","8");
-        table.insertRec(h);
-        HashMap<String,String> i=new HashMap<>();
-        i.put("asd","15");
-        i.put("asf","9");
-        table.insertRec(i);
-        HashMap<String,String> j=new HashMap<>();
-        j.put("asd","12");
-        j.put("asf","10");
-        table.insertRec(j);
-
-        HashMap<String,String> d=new HashMap<>();
-        d.put("asd","14");
-        System.out.println(table.searchRec(d).size());
-        table.deleteRec(f);
-
-        System.out.println(0);
+    public void deleteRecBound(Map<String, String> query) {
+        ArrayList<Record> res = searchRecBound(query);
+        for (Record record :res){
+            for (Field<?> field :record.getCells()){
+                ArrayBPTree<Object, Record> bpt =(ArrayBPTree<Object, Record>) m.get(field.getName());
+                bpt.delete(record,field.getValue(),field.getValue());
+            }
+        }
+    }
+    public void update(Map<String, String> query,String fieldName,String newValue) {
+        ArrayList<Record> res = searchRec(query);
+        for (Record record :res){
+            for (Field<?> field :record.getCells()){
+                if (field.getName().equals(fieldName)){
+                    switch (field.getValue().getClass().getSimpleName()) {
+                        case "Integer" -> ((Field<Integer>)field).setValue(Integer.parseInt(newValue));
+                        case "Double" -> ((Field<Double>)field).setValue(Double.parseDouble(newValue));
+                        case "String" -> ((Field<String>)field).setValue(newValue);
+                        case "Boolean" -> ((Field<Boolean>)field).setValue(Boolean.parseBoolean(newValue));
+                        case "LocalDate" -> {
+                            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+                            ((Field<LocalDate>)field).setValue(LocalDate.parse(newValue,formatter));
+                        }
+                    }
+                }
+            }
+        }
     }
 }

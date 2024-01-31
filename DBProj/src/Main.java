@@ -9,6 +9,7 @@ public class Main {
         Menu m = new Menu();
         View vw = new View();
         String cmd;
+        m.help();
         while (!(cmd = sc.nextLine()).equals("exit")) {
             String[] spl = cmd.split("\s", 2);
             switch (spl[0]) {
@@ -19,10 +20,19 @@ public class Main {
                     vw.insertNewRec(spl[1]);
                     break;
                 case "delete":
-                    //
+                    vw.deleteRec(spl[1]);
+                    break;
+                case "deleteBound":
+                    vw.deleteRecBound(spl[1]);
                     break;
                 case "search" :
                     vw.searchRec(spl[1]);
+                    break;
+                case "searchBound" :
+                    vw.searchRecBound(spl[1]);
+                    break;
+                case "update" :
+                    vw.update(spl[1]);
                     break;
                 default:
             }

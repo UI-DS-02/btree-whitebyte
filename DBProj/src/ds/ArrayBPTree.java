@@ -598,9 +598,6 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
         return values;
     }
 
-
-
-
     public Entry<K, V> insert(K key, V value) {
 
         Entry<K, V> newEntry = null;
@@ -637,7 +634,6 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
 			   		   until no deficiencies are found */
                     InternalNode<K, V> in = ln.parent;
                     while (in != null) {
-                        System.out.println(1);
                         if (in.isOverfull()) {
                             splitInternalNode(in);
                         } else {
@@ -795,28 +791,24 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
             }
         } return rem;
     }
-    public void delete(ArrayList<Record> records,K key) {
+    public void delete(Record record,K lowerBound, K upperBound) {
+
         // Iterate through the doubly linked list of leaves
         ExternalNode<K, V> currNode = this.firstEx;
         while (currNode != null) {
-            Entry<K, V> rem = null;
-            int dpIndex = binarySearch(currNode.map, currNode.degree, key);
 
-            if (dpIndex>=0){
-                // Iterate through the dictionary of each node
-                ExternalNode.MapEntry<K, V> dps[] = currNode.map;
-                for (ExternalNode.MapEntry<K, V> dp : dps) {
-
+            // Iterate through the dictionary of each node
+            ExternalNode.MapEntry<K, V> dps[] = currNode.map;
+            for (ExternalNode.MapEntry<K, V> dp : dps) {
 				/* Stop searching the dictionary once a null value is encountered
 				   as this the indicates the end of non-null values */
-                    if (dp == null) {
-                        break;
-                    }
+                if (dp == null) {
+                    break;
+                }
 
-                    // Include value if its key fits within the provided range
-                    if (records.contains(dp.getValue())) {
-                        rem = currNode.delete(dpIndex);
-
+                // Include value if its key fits within the provided range
+                if (super.getKeyComp().compare(lowerBound, dp.getKey()) <= 0 && super.getKeyComp().compare(dp.getKey(), upperBound) <= 0) {
+                    if (record.compareTo((Record) dp.getValue())==0){
                         // Check for deficiencies
                         if (currNode.isDeficient()) {
                             currNode.deleteExternal1(super.getKeyComp(), this.firstEx, root, super.getComp());
@@ -836,6 +828,7 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
                             currNode.sortMap(super.getComp());
 
                         }
+                        return;
                     }
                 }
             }
@@ -854,20 +847,4 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
     public K getKey() {
         return key;
     }
-
-    public static void main(String[] args) {
-        ArrayBPTree<Integer, Integer> it = new ArrayBPTree<>(3, 1, new Comparator<Integer>(){
-            @Override
-            public int compare(Integer o1, Integer o2) {
-                return o1.compareTo(o2);
-            }
-        });
-        it.insert(1, 1);
-        it.insert(28, 1);
-        it.insert(2, 1);
-        it.insert(4, 1);
-
-    }
-
-
 }
