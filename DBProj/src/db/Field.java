@@ -2,7 +2,7 @@ package db;
 
 import java.util.Comparator;
 
-public class Field<F >{
+public class Field<F>{
 
     private String name;
     private F value;

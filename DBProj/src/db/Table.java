@@ -201,7 +201,7 @@ public class Table {
             isFirst=false;
         } return fin;
     }
-    public void deleteRec(Map<String, String> query) {
+    public ArrayList<Record> deleteRec(Map<String, String> query) {
         ArrayList<Record> res = searchRec(query);
         for (Record record :res){
             for (Field<?> field :record.getCells()){
@@ -209,8 +209,9 @@ public class Table {
                 bpt.delete(record,field.getValue(),field.getValue());
             }
         }
+        return res;
     }
-    public void deleteRecBound(Map<String, String> query) {
+    public ArrayList<Record> deleteRecBound(Map<String, String> query) {
         ArrayList<Record> res = searchRecBound(query);
         for (Record record :res){
             for (Field<?> field :record.getCells()){
@@ -218,21 +219,53 @@ public class Table {
                 bpt.delete(record,field.getValue(),field.getValue());
             }
         }
+        return res;
     }
     public void update(Map<String, String> query,String fieldName,String newValue) {
-        ArrayList<Record> res = searchRec(query);
+        ArrayList<Record> res = deleteRec(query);
+        Set<Record> setRe=new HashSet<>();
         for (Record record :res){
+            setRe.add(record);
+        }
+        for (Record record :setRe){
             for (Field<?> field :record.getCells()){
                 if (field.getName().equals(fieldName)){
                     switch (field.getValue().getClass().getSimpleName()) {
-                        case "Integer" -> ((Field<Integer>)field).setValue(Integer.parseInt(newValue));
-                        case "Double" -> ((Field<Double>)field).setValue(Double.parseDouble(newValue));
-                        case "String" -> ((Field<String>)field).setValue(newValue);
-                        case "Boolean" -> ((Field<Boolean>)field).setValue(Boolean.parseBoolean(newValue));
+                        case "Integer" -> {
+                            ((Field<Integer>)field).setValue(Integer.parseInt(newValue));
+                        }
+                        case "Double" -> {
+                            ((Field<Double>)field).setValue(Double.parseDouble(newValue));
+                        }
+                        case "String" -> {
+                            ((Field<String>)field).setValue(newValue);
+                        }
+                        case "Boolean" -> {
+                            ((Field<Boolean>)field).setValue(Boolean.parseBoolean(newValue));
+                        }
                         case "LocalDate" -> {
                             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
                             ((Field<LocalDate>)field).setValue(LocalDate.parse(newValue,formatter));
                         }
+                    }
+                }
+            }
+            for (Field<?> field :record.getCells()){
+                switch (field.getValue().getClass().getSimpleName()) {
+                    case "Integer" -> {
+                        ((ArrayBPTree<Integer, Record>)m.get(field.getName())).insert((Integer) field.getValue(),record);
+                    }
+                    case "Double" -> {
+                        ((ArrayBPTree<Double, Record>)m.get(field.getName())).insert((Double)field.getValue(),record);
+                    }
+                    case "String" -> {
+                        ((ArrayBPTree<String, Record>)m.get(field.getName())).insert((String) field.getValue(), record);
+                    }
+                    case "Boolean" -> {
+                        ((ArrayBPTree<Boolean, Record>)m.get(field.getName())).insert((Boolean) field.getValue(), record);
+                    }
+                    case "LocalDate" -> {
+                        ((ArrayBPTree<LocalDate, Record>)m.get(field.getName())).insert((LocalDate) field.getValue(), record);
                     }
                 }
             }

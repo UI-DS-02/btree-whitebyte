@@ -1,6 +1,8 @@
 package ds;
 
 import db.Record;
+import exception.EmptyTreeException;
+import exception.KeyNotFoundException;
 
 import java.lang.reflect.Array;
 import java.util.ArrayList;
@@ -741,14 +743,14 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
         return -1;
     }
 
-    public Entry<K, V> delete(K key) {
+    public Entry<K, V> delete(K key) throws EmptyTreeException, KeyNotFoundException {
         Entry<K, V> rem = null;
 
         if (isEmpty()) {
 
             /* Flow of execution goes here when B+ tree has no dictionary pairs */
 
-            System.err.println("Invalid Delete: The B+ tree is currently empty.");
+            throw new EmptyTreeException();
 
         } else {
 
@@ -759,7 +761,7 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
 
                 /* Flow of execution goes here when key is absent in B+ tree */
 
-                System.err.println("Invalid Delete: Key unable to be found.");
+                throw new KeyNotFoundException();
 
             }
             else {
@@ -809,26 +811,27 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
                 // Include value if its key fits within the provided range
                 if (super.getKeyComp().compare(lowerBound, dp.getKey()) <= 0 && super.getKeyComp().compare(dp.getKey(), upperBound) <= 0) {
                     if (record.compareTo((Record) dp.getValue())==0){
-                        // Check for deficiencies
-                        if (currNode.isDeficient()) {
-                            currNode.deleteExternal1(super.getKeyComp(), this.firstEx, root, super.getComp());
-                        }
-                        else if (this.root == null && this.firstEx.degree == 0) {
-
-					/* Flow of execution goes here when the deleted dictionary
-					   pair was the only pair within the tree */
-
-                            // Set first leaf as null to indicate B+ tree is empty
-                            this.firstEx = null;
-
-                        } else {
-
-					/* The dictionary of the LeafNode object may need to be
-					   sorted after a successful delete */
-                            currNode.sortMap(super.getComp());
-
-                        }
-                        return;
+//                        // Check for deficiencies
+//                        if (currNode.isDeficient()) {
+//                            currNode.deleteExternal1(super.getKeyComp(), this.firstEx, root, super.getComp());
+//                        }
+//                        else if (this.root == null && this.firstEx.degree == 0) {
+//
+//					/* Flow of execution goes here when the deleted dictionary
+//					   pair was the only pair within the tree */
+//
+//                            // Set first leaf as null to indicate B+ tree is empty
+//                            this.firstEx = null;
+//
+//                        } else {
+//
+//					/* The dictionary of the LeafNode object may need to be
+//					   sorted after a successful delete */
+//                            currNode.sortMap(super.getComp());
+//
+//                        }
+//                        return;
+                        delete(record,currNode);
                     }
                 }
             }
@@ -838,6 +841,56 @@ public class ArrayBPTree<K, V> extends AbstractBPTree<K, V> {
             currNode = (ExternalNode<K, V>) currNode.rightSibling;
 
         }
+    }
+    public Entry<K, V> delete(Record record,Node currentNode) {
+        Entry<K, V> rem = null;
+
+        if (isEmpty()) {
+
+            /* Flow of execution goes here when B+ tree has no dictionary pairs */
+
+            System.err.println("Invalid Delete: The B+ tree is currently empty.");
+
+        } else {
+
+            // Get leaf node and attempt to find index of key to delete
+            ExternalNode<K, V> ln = (ExternalNode<K, V>) currentNode;
+            int dpIndex = binarySearch(ln.map, ln.degree, key);
+            if (dpIndex < 0) {
+
+                /* Flow of execution goes here when key is absent in B+ tree */
+
+                System.err.println("Invalid Delete: Key unable to be found.");
+
+            }
+            else {
+
+                // Successfully delete the dictionary pair
+                rem = ln.delete(dpIndex);
+
+                // Check for deficiencies
+                if (ln.isDeficient()) {
+                    ln.deleteExternal1(super.getKeyComp(), this.firstEx, root, super.getComp());
+                }
+                else if (this.root == null && this.firstEx.degree == 0) {
+
+					/* Flow of execution goes here when the deleted dictionary
+					   pair was the only pair within the tree */
+
+                    // Set first leaf as null to indicate B+ tree is empty
+                    this.firstEx = null;
+
+                } else {
+
+					/* The dictionary of the LeafNode object may need to be
+					   sorted after a successful delete */
+                    ln.sortMap(super.getComp());
+
+                }
+
+
+            }
+        } return rem;
     }
 
     private int getMidpoint() {

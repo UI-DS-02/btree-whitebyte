@@ -1,3 +1,4 @@
+import exception.InvalidFormatException;
 import view.Menu;
 import view.View;
 
@@ -11,30 +12,37 @@ public class Main {
         String cmd;
         m.help();
         while (!(cmd = sc.nextLine()).equals("exit")) {
-            String[] spl = cmd.split("\s", 2);
-            switch (spl[0]) {
-                case "new" :
-                    vw.createNewTable(spl[1]);
-                    break;
-                case "insert" :
-                    vw.insertNewRec(spl[1]);
-                    break;
-                case "delete":
-                    vw.deleteRec(spl[1]);
-                    break;
-                case "deleteBound":
-                    vw.deleteRecBound(spl[1]);
-                    break;
-                case "search" :
-                    vw.searchRec(spl[1]);
-                    break;
-                case "searchBound" :
-                    vw.searchRecBound(spl[1]);
-                    break;
-                case "update" :
-                    vw.update(spl[1]);
-                    break;
-                default:
+            try {
+                String[] spl = cmd.split("\s", 2);
+                switch (spl[0]) {
+                    case "new" :
+                        vw.createNewTable(spl[1]);
+                        break;
+                    case "insert" :
+                        vw.insertNewRec(spl[1]);
+                        break;
+                    case "delete":
+                        vw.deleteRec(spl[1]);
+                        break;
+                    case "deleteBound":
+                        vw.deleteRecBound(spl[1]);
+                        break;
+                    case "search" :
+                        vw.searchRec(spl[1]);
+                        break;
+                    case "searchBound" :
+                        vw.searchRecBound(spl[1]);
+                        break;
+                    case "update" :
+                        vw.update(spl[1]);
+                        break;
+                    case "switch" :
+                        vw.switchTable(spl[1]);
+                        break;
+                    default: throw new InvalidFormatException();
+                }
+            }catch (Exception exception){
+                System.out.println(exception.getMessage());
             }
         }
     }

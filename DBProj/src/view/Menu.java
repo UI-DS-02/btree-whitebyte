@@ -17,6 +17,7 @@ public class Menu {
                         searchBound fieldLabel=minFieldValue-maxFieldValue
                         delete fieldLabel=fieldValue
                         deleteBound fieldLabel=minFieldValue-maxFieldValue
-                        update fieldLabel=fieldValue(update) fieldLabel=fieldValue """);
+                        update fieldLabel=fieldValue(update) fieldLabel=fieldValue
+                        switch nameTable """);
     }
 }
